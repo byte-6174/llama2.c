@@ -139,8 +139,8 @@ void calcHistogram(const float* data, int dataSize, float minRange, float maxRan
 //    maxRange += 0.01;
 //    minRange -= 0.01;
    float binWidth = (maxRange - minRange) / HISTOGRAM_BUCKETS;
-   printf("DEBUG:: binWidth=%f\n", binWidth);
-   printf("DEBUG:: dataSize=%d\n", dataSize);
+//    printf("DEBUG:: binWidth=%f\n", binWidth);
+//    printf("DEBUG:: dataSize=%d\n", dataSize);
     for (int i = 0; i < dataSize; ++i) {
         if (data[i] >= minRange && data[i] <= maxRange) {
             int binIndex = (int)((data[i] - minRange) / binWidth);
@@ -181,14 +181,23 @@ void calc_stats(float * ptr, int size, char* name,  int glob_data_size){
     max.f = -INFINITY;
     min.f = INFINITY;
 
+    float mean = 0.0;
+    float ssqr = 0.0;
     for (int i = 0; i < size; i++){
         if (ptr[i] < min.f) min.f = ptr[i];
         if (ptr[i] > max.f) max.f = ptr[i];
+        mean += ptr[i];
     }
+    mean /= size;
 
-    printf("-----------%s\n", name);
-    printf("min = 0x%0x [%f], max = 0x%0x [%f] [%d/%d(%.2f%%)]\n", min.u, min.f, max.u, max.f, size, glob_data_size, ((float)(size)/glob_data_size)*100.0);
-    printf("-----------\n");
+    // calc std dev.
+       for (int i = 0; i < size; i++){
+        float dev = ptr[i] - mean;
+        ssqr += dev * dev;
+    }
+    float var = ssqr / (size -1);
+    printf("%s %f %f %f %d %.2f%% %f\n", name, min.f, max.f, mean, size, ((float)(size)/glob_data_size)*100.0, sqrtf(var));
+    // printf("-----------\n");
     int histogram[HISTOGRAM_BUCKETS];
     for (int i = 0; i < HISTOGRAM_BUCKETS; ++i) {
         histogram[i] = 0;
