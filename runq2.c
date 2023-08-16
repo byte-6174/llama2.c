@@ -204,7 +204,7 @@ void get_quants_and_max(float *ptr, int size, int8_t *out_ptr, float* pmax, char
     float max = -INFINITY;
 
     for (int i = 0; i < size; i++){
-        if (ptr[i] > max) max = ptr[i];
+        if (fabs(ptr[i]) > max) max = ptr[i];
     }
     *pmax = max;
     //printf("DEBUG: max = %f\n", max);
@@ -216,13 +216,13 @@ void get_quants_and_max(float *ptr, int size, int8_t *out_ptr, float* pmax, char
     }
     //printf("\n");
     // reconstruct for error debugging
-    float* temp = calloc(size, sizeof(float));
-    float temp_acc = 0.0;
-    for (int i = 0; i < size; i++){
-        temp[i] = (max/127) * out_ptr[i];
-        temp_acc += fabs(temp[i] - ptr[i]) * fabs(temp[i] - ptr[i]); 
+    // float* temp = calloc(size, sizeof(float));
+    // float temp_acc = 0.0;
+    // for (int i = 0; i < size; i++){
+        // temp[i] = (max/127) * out_ptr[i];
+        // temp_acc += fabs(temp[i] - ptr[i]) * fabs(temp[i] - ptr[i]); 
         //printf("%f, %f, err = %f\n", ptr[i], temp[i], fabs(temp[i] - ptr[i]));
-    }
+    // }
     // printf("[%s] size = %d, rms-err= %f\n", label, size, sqrt(temp_acc));
 
 
@@ -243,7 +243,7 @@ void matmulint(float* xout, float* x, float* w, int n, int d) {
     #pragma omp parallel for private(i)
     for (int i = 0; i < d; i++) {
         //float val = 0.0f;
-        int16_t vali = 0;
+        int32_t vali = 0;
         for (int j = 0; j < n; j++) {
             //val += w[i * n + j] * x[j];
             // calculate int8 mults
@@ -251,8 +251,10 @@ void matmulint(float* xout, float* x, float* w, int n, int d) {
         }
         //xout[i] = val;
         //printf("DIFF = %f\n", fabs(xout[i] - (vali * (maxx * maxw)) / (127 * 127))); 
-        xout[i] = (vali * (maxx * maxw)) / (127 * 127);
+        xout[i] = ((float)vali) * (maxx * maxw) / (127 * 127);
     }
+    free(intx);
+    free(intw);
 }
 
 void matmul(float* xout, float* x, float* w, int n, int d) {
@@ -380,11 +382,11 @@ void transformer(int token, int pos, Config* p, RunState* s, TransformerWeights*
 
         // Now for FFN in PyTorch we have: self.w2(F.silu(self.w1(x)) * self.w3(x))
         // first calculate self.w1(x) and self.w3(x)
-        matmul(s->hb, s->xb, w->w1 + l*dim*hidden_dim, dim, hidden_dim);
-        //matmulint(s->hb, s->xb, w->w1 + l*dim*hidden_dim, dim, hidden_dim);
+        //matmul(s->hb, s->xb, w->w1 + l*dim*hidden_dim, dim, hidden_dim);
+        matmulint(s->hb, s->xb, w->w1 + l*dim*hidden_dim, dim, hidden_dim);
         
-        matmul(s->hb2, s->xb, w->w3 + l*dim*hidden_dim, dim, hidden_dim);
-        //matmulint(s->hb2, s->xb, w->w3 + l*dim*hidden_dim, dim, hidden_dim);
+        //matmul(s->hb2, s->xb, w->w3 + l*dim*hidden_dim, dim, hidden_dim);
+        matmulint(s->hb2, s->xb, w->w3 + l*dim*hidden_dim, dim, hidden_dim);
 
         // F.silu; silu(x)=x*σ(x),where σ(x) is the logistic sigmoid
         for (int i = 0; i < hidden_dim; i++) {
@@ -397,8 +399,8 @@ void transformer(int token, int pos, Config* p, RunState* s, TransformerWeights*
         }
 
         // final matmul to get the output of the ff >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-        //matmul(s->xb, s->hb, w->w2 + l*dim*hidden_dim, hidden_dim, dim);
-        matmulint(s->xb, s->hb, w->w2 + l*dim*hidden_dim, hidden_dim, dim);
+        matmul(s->xb, s->hb, w->w2 + l*dim*hidden_dim, hidden_dim, dim);
+        //matmulint(s->xb, s->hb, w->w2 + l*dim*hidden_dim, hidden_dim, dim);
 
         // residual connection
         accum(x, s->xb, dim);
