@@ -254,7 +254,7 @@ void dequantize_token(float* x, uint8_t* wptr, int token, int dim) {
 void transformer(int token, int pos, Config* p, RunState* s, TransformerWeights* w) {
 
     // a few convenience variables
-    float *x = s->x;
+    float *x = s->x; // acts at current timestamp (dim,)
     int dim = p->dim;
     int kv_dim = (p->dim * p->n_kv_heads) / p->n_heads;
     int kv_mul = p->n_heads / p->n_kv_heads; // integer multiplier of the kv sharing in multiquery
@@ -272,12 +272,12 @@ void transformer(int token, int pos, Config* p, RunState* s, TransformerWeights*
     for(int l = 0; l < p->n_layers; l++) {
 
         // attention rmsnorm
-        rmsnorm(s->xb, x, w->rms_att_weight, l, dim);
+        rmsnorm(s->xb, x, w->rms_att_weight, l, dim); // DEBUG: rmsnorm s->xb with w * x/sqrt(x^2/n)
 
         // qkv matmuls for this position
-        matmul(s->q, s->xb, w->wq, l, dim, dim);
-        matmul(s->k, s->xb, w->wk, l, dim, kv_dim);
-        matmul(s->v, s->xb, w->wv, l, dim, kv_dim);
+        matmul(s->q, s->xb, w->wq, l, dim, dim);      // MATMULT DEBUG: (1, dim) = (1, dim) X (dim, nh * hs)
+        matmul(s->k, s->xb, w->wk, l, dim, kv_dim);   // MATMULT DEBUG: (1, dim) = (1, dim) X (dim, nkvh * hs)
+        matmul(s->v, s->xb, w->wv, l, dim, kv_dim);   // MATMULT DEBUG: (1, dim) = (1, dim) X (dim, nkvh * hs)
 
         // RoPE relative positional encoding: complex-valued rotate q and k by freq_cis in each head
         for (int i = 0; i < dim; i+=2) {
@@ -345,7 +345,7 @@ void transformer(int token, int pos, Config* p, RunState* s, TransformerWeights*
         }
 
         // final matmul to get the output of the attention
-        matmul(s->xb2, s->xb, w->wo, l, dim, dim);
+        matmul(s->xb2, s->xb, w->wo, l, dim, dim);    // MATMULT DEBUG: (1, dim) = (1, dim) X (dim, nh * hs)
 
         // residual connection back into x
         accum(x, s->xb2, dim);
@@ -355,7 +355,7 @@ void transformer(int token, int pos, Config* p, RunState* s, TransformerWeights*
 
         // Now for FFN in PyTorch we have: self.w2(F.silu(self.w1(x)) * self.w3(x))
         // first calculate self.w1(x) and self.w3(x)
-        matmul(s->hb, s->xb, w->w1, l, dim, hidden_dim);
+        matmul(s->hb, s->xb, w->w1, l, dim, hidden_dim);    // MATMULT DEBUG: (1, hidden_dim) = (1, dim) X (dim, hidden_dim)
         matmul(s->hb2, s->xb, w->w3, l, dim, hidden_dim);
 
         // F.silu; silu(x)=x*σ(x),where σ(x) is the logistic sigmoid
@@ -369,7 +369,7 @@ void transformer(int token, int pos, Config* p, RunState* s, TransformerWeights*
         }
 
         // final matmul to get the output of the ffn
-        matmul(s->xb, s->hb, w->w2, l, hidden_dim, dim);
+        matmul(s->xb, s->hb, w->w2, l, hidden_dim, dim);    // MATMULT DEBUG:
 
         // residual connection
         accum(x, s->xb, dim);
@@ -379,7 +379,7 @@ void transformer(int token, int pos, Config* p, RunState* s, TransformerWeights*
     rmsnorm(x, x, w->rms_final_weight, 0, dim);
 
     // classifier into logits
-    matmul(s->logits, x, w->wcls, 0, p->dim, p->vocab_size);
+    matmul(s->logits, x, w->wcls, 0, p->dim, p->vocab_size);   // MATMULT DEBUG:
 }
 
 // ----------------------------------------------------------------------------
@@ -649,6 +649,7 @@ int main(int argc, char *argv[]) {
     if (prompt != NULL) {
         prompt_tokens = (int*)malloc(strlen(prompt) * sizeof(int));
         bpe_encode(prompt, vocab, vocab_scores, config.vocab_size, max_token_length, prompt_tokens, &num_prompt_tokens);
+        for (int i = 0; i < strlen(prompt); i++) printf("[DEBUG]:%c %d\n", prompt[i], prompt_tokens[i]);
     }
 
     // start the main loop

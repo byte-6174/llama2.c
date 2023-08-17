@@ -613,6 +613,7 @@ int main(int argc, char *argv[]) {
     if (prompt != NULL) {
         prompt_tokens = (int*)malloc(strlen(prompt) * sizeof(int));
         bpe_encode(prompt, vocab, vocab_scores, config.vocab_size, max_token_length, prompt_tokens, &num_prompt_tokens);
+        for (int i = 0; i < strlen(prompt); i++) printf("[DEBUG]:%c %d\n", prompt[i], prompt_tokens[i]);
     }
 
     // start the main loop

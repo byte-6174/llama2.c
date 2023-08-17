@@ -123,7 +123,7 @@ void quantize_weights(FILE* file, float *weights, int n_layers, int layer_size, 
       // save min value and scale factor to file
       fwrite(&min, sizeof(float), 1, file);
       fwrite(&scale, sizeof(float), 1, file);
-      printf("[debug] min, scale written success for layer %d\n", l);
+    //   printf("[debug] min, scale written success for layer %d\n", l);
       // quantize the weights from this layer and save to file
       uint8_t qweight;
       for (int i = 0; i < layer_size; i++){
@@ -186,6 +186,18 @@ int convert_weights_q8(TransformerWeights *w, Config *p){
     return 0;
 }
 
+void printConfig(Config *p){
+    prinif("--------- Model config ------------\n");
+    prinf("dim; // transformer dimension = %d\n", p->dim);
+    prinf("hidden_dim; // for ffn layers = %d\n", p->hidden_dim);
+    prinf("n_layers; // number of layers = %d\n", p->n_layers);
+    prinf("n_heads; // number of query heads = %d\n", p->n_heads);
+    prinf("n_kv_heads; // number of key/value heads (can be < query heads because of multiquery) = %d\n", p->n_kv_heads);
+    prinf("vocab_size; // vocabulary size, usually 256 (byte-level) = %d\n", p->vocab_size);
+    prinf("seq_len; // max sequence length = %d\n", p->seq_len);
+    printf("----------------------------------\n");
+
+}
 int main(int argc, char *argv[]) {
 
     // poor man's C argparse
@@ -217,6 +229,7 @@ int main(int argc, char *argv[]) {
         config.vocab_size = abs(config.vocab_size);
         printf("vocab size = %d  shared_weights=%d\n", config.vocab_size, shared_weights);
 
+        printConfig(&config);
         // figure out the file size
         fseek(file, 0, SEEK_END); // move file pointer to end of file
         file_size = ftell(file); // get the file size, in bytes
