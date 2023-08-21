@@ -136,6 +136,36 @@ void quantize_weights(FILE* file, float *weights, int n_layers, int layer_size, 
 
 }
 
+uint8_t pack_nibbles(uint8_t a, uint8_t b) {
+    return (a << 4) | b;
+}
+void quantize_weights_4b(FILE* file, float *weights, int n_layers, int layer_size, char *name) {
+    puts("------------------------");
+    printf("%s layer_size=%d\n", name, layer_size);
+    // for each layer
+    for (int l = 0; l < n_layers; l++) {
+      // get the min and max values for this layer
+      float min;
+      float max;
+      get_minmax(weights, layer_size, &min, &max);
+      // compute the scale factor
+      float scale = (max - min) / 15;
+      printf("l=%d min=%f max=%f scale=%f\n", l, min, max, scale);
+      // save min value and scale factor to file
+      fwrite(&min, sizeof(float), 1, file);
+      fwrite(&scale, sizeof(float), 1, file);
+      // quantize the weights from this layer and save to file
+      uint8_t qweight1, qweight2;
+      for (int i = 0; i < layer_size; i += 2){
+          qweight1 = round((weights[i] - min) / (max - min) * 15);
+          qweight2 = round((weights[i+1] - min) / (max - min) * 15);
+          uint8_t packed = pack_nibbles(qweight1, qweight2);
+          fwrite(&packed, sizeof(uint8_t), 1, file);
+      }
+      // advance to the weights of the next layer
+      weights += layer_size;
+    }
+}
 void write_weights(FILE* file, float *weights, int n_layers, int layer_size, char *name) {
     puts("------------------------");
     printf("%s layer_size=%d\n", name, layer_size);
@@ -168,28 +198,28 @@ int convert_weights_q8(TransformerWeights *w, Config *p, int shared_weights){
     // write quantized weights
     int head_size = p->dim / p->n_heads;
 
-    quantize_weights(file, w->token_embedding_table, 1, p->vocab_size * p->dim, "token_embedding_table");
+    quantize_weights_4b(file, w->token_embedding_table, 1, p->vocab_size * p->dim, "token_embedding_table");
 
-    quantize_weights(file, w->rms_att_weight, p->n_layers, p->dim, "rms_att_weight");
+    quantize_weights_4b(file, w->rms_att_weight, p->n_layers, p->dim, "rms_att_weight");
 
-    quantize_weights(file, w->wq, p->n_layers, p->dim * (p->n_heads * head_size), "wq");
-    quantize_weights(file, w->wk, p->n_layers, p->dim * (p->n_kv_heads * head_size), "wk");
-    quantize_weights(file, w->wv, p->n_layers, p->dim * (p->n_kv_heads * head_size), "wv");
-    quantize_weights(file, w->wo, p->n_layers, (p->n_heads * head_size) * p->dim, "wo");
+    quantize_weights_4b(file, w->wq, p->n_layers, p->dim * (p->n_heads * head_size), "wq");
+    quantize_weights_4b(file, w->wk, p->n_layers, p->dim * (p->n_kv_heads * head_size), "wk");
+    quantize_weights_4b(file, w->wv, p->n_layers, p->dim * (p->n_kv_heads * head_size), "wv");
+    quantize_weights_4b(file, w->wo, p->n_layers, (p->n_heads * head_size) * p->dim, "wo");
 
-    quantize_weights(file, w->rms_ffn_weight, p->n_layers, p->dim, "rms_ffn_weight");
+    quantize_weights_4b(file, w->rms_ffn_weight, p->n_layers, p->dim, "rms_ffn_weight");
     
-    quantize_weights(file, w->w1, p->n_layers, p->dim * p->hidden_dim, "w1");
-    quantize_weights(file, w->w2, p->n_layers, p->hidden_dim * p->dim, "w2");
-    quantize_weights(file, w->w3, p->n_layers, p->dim * p->hidden_dim, "w3");
+    quantize_weights_4b(file, w->w1, p->n_layers, p->dim * p->hidden_dim, "w1");
+    quantize_weights_4b(file, w->w2, p->n_layers, p->hidden_dim * p->dim, "w2");
+    quantize_weights_4b(file, w->w3, p->n_layers, p->dim * p->hidden_dim, "w3");
 
-    quantize_weights(file, w->rms_final_weight, 1, p->dim, "rms_final_weight");
+    quantize_weights_4b(file, w->rms_final_weight, 1, p->dim, "rms_final_weight");
 
     write_weights(file, w->freq_cis_real, 1, p->seq_len * head_size / 2, "freq_cis_real");
     write_weights(file, w->freq_cis_imag, 1, p->seq_len * head_size / 2, "freq_cis_imag");
 
     if (!shared_weights) {
-        quantize_weights(file, w->wcls, 1, p->vocab_size * p->dim, "wcls");
+        quantize_weights_4b(file, w->wcls, 1, p->vocab_size * p->dim, "wcls");
     }
 
     puts("------------------------");
