@@ -45,6 +45,24 @@ rungnu:
 runompgnu:
 	$(CC) -Ofast -fopenmp -std=gnu11 run.c  -lm  -o run
 
+# run all tests
+.PHONY: test
+test:
+	pytest
+
+# run only tests for run.c C implementation (is a bit faster if only C code changed)
+.PHONY: testc
+testc:
+	pytest -k runc
+
+# run the C tests, without touching pytest / python
+# to increase verbosity level run e.g. as `make testcc VERBOSITY=1`
+VERBOSITY ?= 0
+.PHONY: testcc
+testcc:
+	$(CC) -DVERBOSITY=$(VERBOSITY) -O3 -o testc test.c -lm
+	./testc
+
 .PHONY: clean
 clean:
 	rm -f run
